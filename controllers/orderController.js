@@ -37,10 +37,36 @@ const getStripeClient = () => {
   return new Stripe(stripeKey);
 };
 
+const normalizeUrl = (value = "") => String(value).trim().replace(/\/$/, "");
+
+const getFrontendUrl = (req) => {
+  const configuredFrontendUrl = normalizeUrl(process.env.FRONTEND_URL || "");
+  const requestOrigin = normalizeUrl(req.headers.origin || "");
+  const productionLike = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+  const configuredLooksLocal = /localhost|127\.0\.0\.1/i.test(configuredFrontendUrl);
+
+  // In production, prefer request origin when configured FRONTEND_URL is missing or still localhost.
+  if (productionLike && requestOrigin && (!configuredFrontendUrl || configuredLooksLocal)) {
+    return requestOrigin;
+  }
+
+  return configuredFrontendUrl || requestOrigin || "https://food-del-ten-blue.vercel.app";
+};
+
+const getRedirectUrl = (template, fallbackUrl, orderId) => {
+  const cleanTemplate = normalizeUrl(template || "");
+  if (!cleanTemplate) return fallbackUrl;
+
+  if (cleanTemplate.includes("{ORDER_ID}")) {
+    return cleanTemplate.replaceAll("{ORDER_ID}", String(orderId));
+  }
+
+  return cleanTemplate;
+};
+
 // placing user order from frontend
 const placeOrder = async (req, res) => {
-  const frontend_url =
-    process.env.FRONTEND_URL || "https://food-del-ten-blue.vercel.app";
+  const frontend_url = getFrontendUrl(req);
 
   try {
     const userId = req.body.userId;
@@ -100,11 +126,26 @@ const placeOrder = async (req, res) => {
 
     let session;
     try {
+      const successFallback = `${frontend_url}/verify?success=true&orderid=${newOrder._id}`;
+      const cancelFallback = `${frontend_url}/verify?success=false&orderid=${newOrder._id}`;
+
+      const successUrl = getRedirectUrl(
+        process.env.STRIPE_SUCCESS_URL,
+        successFallback,
+        newOrder._id,
+      );
+
+      const cancelUrl = getRedirectUrl(
+        process.env.STRIPE_CANCEL_URL,
+        cancelFallback,
+        newOrder._id,
+      );
+
       session = await stripe.checkout.sessions.create({
         line_items: line_Items,
         mode: "payment",
-        success_url: `${frontend_url}/verify?success=true&orderid=${newOrder._id}`,
-        cancel_url: `${frontend_url}/verify?success=false&orderid=${newOrder._id}`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
       });
     } catch (stripeError) {
       // Do not leak key snippets in client-facing errors.

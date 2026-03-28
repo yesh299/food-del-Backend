@@ -11,9 +11,19 @@ import orderRouter from "./routes/orderRoute.js";
 const app = express();
 const port = process.env.PORT || 4000;
 
+const normalizeOrigin = (origin = "") => String(origin).trim().replace(/\/$/, "");
+const splitOrigins = (value = "") =>
+  String(value)
+    .split(",")
+    .map((item) => normalizeOrigin(item))
+    .filter(Boolean);
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "https://food-del-ten-blue.vercel.app",
-  process.env.ADMIN_URL || "https://food-del-admin-navy.vercel.app",
+  ...splitOrigins(process.env.CORS_ORIGINS),
+  ...splitOrigins(process.env.FRONTEND_URL),
+  ...splitOrigins(process.env.ADMIN_URL),
+  "https://food-del-ten-blue.vercel.app",
+  "https://food-del-admin-navy.vercel.app",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:5174",
@@ -21,7 +31,7 @@ const allowedOrigins = [
   "https://food-del-admin.vercel.app",
 ];
 const normalizedAllowedOrigins = new Set(
-  allowedOrigins.map((allowedOrigin) => allowedOrigin.replace(/\/$/, "")),
+  allowedOrigins.map((allowedOrigin) => normalizeOrigin(allowedOrigin)),
 );
 
 // middleware
@@ -29,7 +39,7 @@ app.use(express.json());
 app.use(
   cors({
     origin: (origin, callback) => {
-      const normalizedOrigin = origin?.replace(/\/$/, "");
+      const normalizedOrigin = normalizeOrigin(origin || "");
       if (!origin || normalizedAllowedOrigins.has(normalizedOrigin)) {
         return callback(null, true);
       }
