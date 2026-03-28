@@ -3,13 +3,19 @@ import userModel from "../models/userModel.js";
 import Stripe from "stripe";
 
 const normalizeStripeKey = (rawKey = "") => {
-  // Trim whitespace and optional wrapping quotes from hosting env values.
-  return String(rawKey).trim().replace(/^['\"]|['\"]$/g, "");
+  // Hosting dashboards sometimes introduce quotes/newlines while pasting secrets.
+  return String(rawKey)
+    .trim()
+    .replace(/^['\"]|['\"]$/g, "")
+    .replace(/\s+/g, "");
 };
 
 const getStripeClient = () => {
   const stripeKey = normalizeStripeKey(
-    process.env.STRIPE_SECRET_KEY || process.env.STRIPE_KEY,
+    process.env.STRIPE_SECRET_KEY ||
+      process.env.STRIPE_KEY ||
+      process.env.STRIPE_SECRET ||
+      process.env.STRIPE_API_KEY,
   );
 
   if (!stripeKey) {
@@ -92,12 +98,29 @@ const placeOrder = async (req, res) => {
       quantity: 1,
     });
 
-    const session = await stripe.checkout.sessions.create({
-      line_items: line_Items,
-      mode: "payment",
-      success_url: `${frontend_url}/verify?success=true&orderid=${newOrder._id}`,
-      cancel_url: `${frontend_url}/verify?success=false&orderid=${newOrder._id}`,
-    });
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        line_items: line_Items,
+        mode: "payment",
+        success_url: `${frontend_url}/verify?success=true&orderid=${newOrder._id}`,
+        cancel_url: `${frontend_url}/verify?success=false&orderid=${newOrder._id}`,
+      });
+    } catch (stripeError) {
+      // Do not leak key snippets in client-facing errors.
+      if (
+        stripeError?.type === "StripeAuthenticationError" ||
+        /invalid api key/i.test(String(stripeError?.message || ""))
+      ) {
+        return res.json({
+          success: false,
+          message:
+            "Stripe authentication failed on server. Set a valid STRIPE_SECRET_KEY (sk_...) in backend deployment env and redeploy.",
+        });
+      }
+
+      throw stripeError;
+    }
 
     return res.json({ success: true, session_url: session.url });
   } catch (error) {
