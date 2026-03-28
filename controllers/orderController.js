@@ -16,6 +16,12 @@ const getStripeClient = () => {
     throw new Error("Stripe key is missing on server");
   }
 
+  if (stripeKey.startsWith("pk_")) {
+    throw new Error(
+      "You are using a Stripe public key as secret. Put pk_* in STRIPE_PUBLISHABLE_KEY and set STRIPE_SECRET_KEY to sk_*",
+    );
+  }
+
   if (!stripeKey.startsWith("sk_")) {
     throw new Error(
       "Stripe secret key is invalid. Use a key that starts with sk_",
