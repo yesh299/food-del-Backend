@@ -2,7 +2,28 @@ import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const normalizeStripeKey = (rawKey = "") => {
+  // Trim whitespace and optional wrapping quotes from hosting env values.
+  return String(rawKey).trim().replace(/^['\"]|['\"]$/g, "");
+};
+
+const getStripeClient = () => {
+  const stripeKey = normalizeStripeKey(
+    process.env.STRIPE_SECRET_KEY || process.env.STRIPE_KEY,
+  );
+
+  if (!stripeKey) {
+    throw new Error("Stripe key is missing on server");
+  }
+
+  if (!stripeKey.startsWith("sk_")) {
+    throw new Error(
+      "Stripe secret key is invalid. Use a key that starts with sk_",
+    );
+  }
+
+  return new Stripe(stripeKey);
+};
 
 // placing user order from frontend
 const placeOrder = async (req, res) => {
@@ -21,10 +42,13 @@ const placeOrder = async (req, res) => {
       return res.json({ success: false, message: "Cart is empty" });
     }
 
-    if (!process.env.STRIPE_SECRET_KEY) {
+    let stripe;
+    try {
+      stripe = getStripeClient();
+    } catch (stripeConfigError) {
       return res.json({
         success: false,
-        message: "Stripe key is missing on server",
+        message: stripeConfigError.message,
       });
     }
 
