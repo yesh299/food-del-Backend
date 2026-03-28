@@ -9,5 +9,6 @@ orderRouter.post("/verify", verifyOrder);
 orderRouter.post("/usersOrders", authMiddleware, usersOrders);
 orderRouter.get("/list", listOrders);
 orderRouter.post("/status", updateOrderStatus);
+orderRouter.put("/status", updateOrderStatus);
 
 export default orderRouter;

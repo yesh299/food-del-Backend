@@ -9,11 +9,34 @@ import orderRouter from "./routes/orderRoute.js";
 
 // app config
 const app = express();
-const port = 4000;
+const port = process.env.PORT || 4000;
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "https://food-del-ten-blue.vercel.app",
+  process.env.ADMIN_URL || "https://food-del-admin-navy.vercel.app",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5174",
+  "https://food-del-admin.vercel.app",
+];
+const normalizedAllowedOrigins = new Set(
+  allowedOrigins.map((allowedOrigin) => allowedOrigin.replace(/\/$/, "")),
+);
 
 // middleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      const normalizedOrigin = origin?.replace(/\/$/, "");
+      if (!origin || normalizedAllowedOrigins.has(normalizedOrigin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+  }),
+);
 
 //DB Connection
 connectDB();
