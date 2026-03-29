@@ -71,6 +71,8 @@ const placeOrder = async (req, res) => {
   try {
     const userId = req.body.userId;
     const items = req.body.items || req.body.Items || req.body.cartItems || [];
+    const paymentMethodRaw = String(req.body.paymentMethod || "online").toLowerCase();
+    const paymentMethod = paymentMethodRaw === "cod" ? "cod" : "online";
 
     if (!userId) {
       return res.json({ success: false, message: "User not authorized" });
@@ -78,6 +80,21 @@ const placeOrder = async (req, res) => {
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.json({ success: false, message: "Cart is empty" });
+    }
+
+    const newOrder = new orderModel({
+      // add new item in the database
+      userId,
+      items,
+      amount: req.body.amount,
+      address: req.body.address,
+      paymentMethod,
+    });
+    await newOrder.save();
+    await userModel.findByIdAndUpdate(userId, { cartData: {} }); // cleaning the user cart data from this line
+
+    if (paymentMethod === "cod") {
+      return res.json({ success: true, message: "Order placed successfully", paymentMethod: "cod" });
     }
 
     let stripe;
@@ -89,16 +106,6 @@ const placeOrder = async (req, res) => {
         message: stripeConfigError.message,
       });
     }
-
-    const newOrder = new orderModel({
-      // add new item in the database
-      userId,
-      items,
-      amount: req.body.amount,
-      address: req.body.address,
-    });
-    await newOrder.save();
-    await userModel.findByIdAndUpdate(userId, { cartData: {} }); // cleaning the user cart data from this line
 
     const line_Items = items.map((item) => ({
       //for stripe payment
@@ -163,7 +170,7 @@ const placeOrder = async (req, res) => {
       throw stripeError;
     }
 
-    return res.json({ success: true, session_url: session.url });
+    return res.json({ success: true, session_url: session.url, paymentMethod: "online" });
   } catch (error) {
     console.log(error);
     return res.json({ success: false, message: error.message || "error" });
